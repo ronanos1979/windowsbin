@@ -7,6 +7,10 @@ Copies, moves, or previews files from Source into Dest while preserving the
 relative source folder structure. A source file is skipped when the same filename
 already exists anywhere under Dest. CSV logs are written under Dest\_merge_logs.
 
+Optionally, every file transferred to Dest is also copied to SecondDest with the
+same relative folder structure. This is useful for keeping two external drives
+identical during a merge operation.
+
 .PARAMETER Mode
 Optional. Transfer mode: dry-run, copy, or move. If omitted, the script prompts
 for a value.
@@ -19,11 +23,19 @@ for a value.
 Optional. Destination directory. Created if it does not exist. If omitted, the
 script prompts for a value.
 
+.PARAMETER SecondDest
+Optional. A second destination directory. When provided, every file transferred
+to Dest is also copied to SecondDest preserving the same relative folder structure.
+Not prompted for if omitted.
+
 .EXAMPLE
 .\merge_unique_files.ps1 -Mode dry-run -Source D:\Src -Dest D:\Dst
 
 .EXAMPLE
 .\merge_unique_files.ps1 -Mode copy -Source D:\Src -Dest D:\Dst
+
+.EXAMPLE
+.\merge_unique_files.ps1 -Mode move -Source D:\Src -Dest G:\Pictures -SecondDest H:\Pictures
 #>
 
 param(
@@ -35,7 +47,10 @@ param(
     [string]$Source,
 
     [Parameter(Mandatory=$false)]
-    [string]$Dest
+    [string]$Dest,
+
+    [Parameter(Mandatory=$false)]
+    [string]$SecondDest
 )
 
 function Read-RequiredValue {
@@ -79,12 +94,21 @@ if ([string]::IsNullOrWhiteSpace($Dest)) {
 $Source = [System.IO.Path]::GetFullPath($Source)
 $Dest   = [System.IO.Path]::GetFullPath($Dest)
 
+$useSecondDest = -not [string]::IsNullOrWhiteSpace($SecondDest)
+if ($useSecondDest) {
+    $SecondDest = [System.IO.Path]::GetFullPath($SecondDest)
+}
+
 if (-not (Test-Path -Path $Source -PathType Container)) {
     Write-Error "Source directory does not exist: $Source"
     exit 1
 }
 
 $null = New-Item -ItemType Directory -Path $Dest -Force
+
+if ($useSecondDest -and $Mode -ne 'dry-run') {
+    $null = New-Item -ItemType Directory -Path $SecondDest -Force
+}
 
 $logDir = Join-Path $Dest '_merge_logs'
 $null = New-Item -ItemType Directory -Path $logDir -Force
@@ -93,12 +117,15 @@ $timestamp   = Get-Date -Format "yyyyMMdd_HHmmss"
 $logFile     = Join-Path $logDir "merge_unique_log_$timestamp.csv"
 $skippedFile = Join-Path $logDir "merge_unique_skipped_$timestamp.csv"
 
-Set-Content -Path $logFile     -Value "source_path,destination_path,action,reason"
+Set-Content -Path $logFile     -Value "source_path,destination_path,second_dest_path,action,reason"
 Set-Content -Path $skippedFile -Value "source_path,existing_destination_path,reason"
 
 Write-Host "Mode:        $Mode"
 Write-Host "Source:      $Source"
 Write-Host "Destination: $Dest"
+if ($useSecondDest) {
+    Write-Host "Second Dest: $SecondDest"
+}
 Write-Host "Log:         $logFile"
 Write-Host "Skipped:     $skippedFile"
 Write-Host ""
@@ -135,7 +162,7 @@ for ($i = 0; $i -lt $total; $i++) {
         Write-Host "[SKIP] $($file.FullName)"
         Write-Host "       Existing in destination: $existingPath"
         Add-Content -Path $skippedFile -Value "`"$($file.FullName)`",`"$existingPath`",`"filename already exists in destination tree`""
-        Add-Content -Path $logFile     -Value "`"$($file.FullName)`",`"`",`"skipped`",`"filename already exists in destination tree`""
+        Add-Content -Path $logFile     -Value "`"$($file.FullName)`",`"`",`"`",`"skipped`",`"filename already exists in destination tree`""
         continue
     }
 
@@ -146,7 +173,11 @@ for ($i = 0; $i -lt $total; $i++) {
     if ($Mode -eq 'dry-run') {
         Write-Host "[DRY RUN] $($file.FullName)"
         Write-Host "          -> $targetPath"
-        Add-Content -Path $logFile -Value "`"$($file.FullName)`",`"$targetPath`",`"dry-run`",`"would transfer`""
+        if ($useSecondDest) {
+            $secondTargetPath = Join-Path $SecondDest $relativePath
+            Write-Host "          -> (second) $secondTargetPath"
+        }
+        Add-Content -Path $logFile -Value "`"$($file.FullName)`",`"$targetPath`",`"`",`"dry-run`",`"would transfer`""
         $destIndex[$filename] = $targetPath
         continue
     }
@@ -156,12 +187,27 @@ for ($i = 0; $i -lt $total; $i++) {
     if ($Mode -eq 'copy') {
         Copy-Item -LiteralPath $file.FullName -Destination $targetPath
         Write-Host "[COPIED] $($file.FullName) -> $targetPath"
-        Add-Content -Path $logFile -Value "`"$($file.FullName)`",`"$targetPath`",`"copied`",`"new filename`""
     } elseif ($Mode -eq 'move') {
         Move-Item -LiteralPath $file.FullName -Destination $targetPath
         Write-Host "[MOVED] $($file.FullName) -> $targetPath"
-        Add-Content -Path $logFile -Value "`"$($file.FullName)`",`"$targetPath`",`"moved`",`"new filename`""
     }
+
+    $secondDestPath = ''
+    if ($useSecondDest) {
+        $secondTargetPath = Join-Path $SecondDest $relativePath
+        $secondTargetDir  = [System.IO.Path]::GetDirectoryName($secondTargetPath)
+        try {
+            $null = New-Item -ItemType Directory -Path $secondTargetDir -Force
+            Copy-Item -LiteralPath $targetPath -Destination $secondTargetPath
+            $secondDestPath = $secondTargetPath
+            Write-Host "         -> (second) $secondTargetPath"
+        } catch {
+            Write-Warning "Failed to copy to second destination: $secondTargetPath`n  $($_.Exception.Message)"
+        }
+    }
+
+    $action = if ($Mode -eq 'copy') { 'copied' } else { 'moved' }
+    Add-Content -Path $logFile -Value "`"$($file.FullName)`",`"$targetPath`",`"$secondDestPath`",`"$action`",`"new filename`""
 
     $destIndex[$filename] = $targetPath
 }
