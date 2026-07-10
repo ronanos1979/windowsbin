@@ -1,5 +1,17 @@
-# System triage — quick snapshot of CPU, RAM, disk, and top processes
-# Usage: powershell -ExecutionPolicy Bypass -File triage.ps1
+<#
+.SYNOPSIS
+Prints a quick Windows system triage report.
+
+.DESCRIPTION
+Shows top processes by CPU, memory totals, CPU load, disk health, possible remote
+access tools, and startup commands.
+
+.PARAMETER None
+This script does not accept command-line parameters.
+
+.EXAMPLE
+powershell -ExecutionPolicy Bypass -File triage.ps1
+#>
 
 Write-Host "`n=== TOP PROCESSES BY CPU ===" -ForegroundColor Cyan
 Get-Process |

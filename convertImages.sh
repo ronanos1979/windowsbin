@@ -1,4 +1,12 @@
 #!/bin/sh
+#
+# Summary:
+#   Recursively renames common image and media files in the current tree using
+#   exiv2 metadata and the format YYYYMMDD_HHMMSS_originalname.
+#
+# Parameters:
+#   None. This script does not accept command-line arguments. It operates on the
+#   current directory tree.
 
 
 find . -iname \*JPG -exec exiv2 -v -t -r '%Y%m%d_%H%M%S_:basename:' rename {} \;

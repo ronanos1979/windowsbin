@@ -1,4 +1,13 @@
 #!/bin/sh
+#
+# Summary:
+#   Uses exiftool to populate missing DateTimeOriginal values from CreateDate for
+#   files in the current tree, stores the original filename in comment fields,
+#   and renames files using metadata date plus the original filename.
+#
+# Parameters:
+#   None. This script does not accept command-line arguments. It operates on the
+#   current directory tree.
 
 
 # E.g. 100_0785.mov -> 20060101-025736-000-100_0785.mov

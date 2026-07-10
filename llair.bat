@@ -1,3 +1,9 @@
+@rem Summary:
+@rem   Sets Java and LexiconLair environment variables, changes into the
+@rem   LexiconLair project folder, and prints common backend/frontend commands.
+@rem Parameters:
+@rem   None. This script does not read command-line arguments.
+
 rem set JAVA_HOME=c:\tools\jdk-25.0.2
 set JAVA_HOME=c:\tools\jdk-21.0.10
 set LEXICONLAIR_PG_PASSWORD=change-me

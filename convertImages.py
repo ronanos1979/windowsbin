@@ -1,3 +1,14 @@
+"""
+Summary:
+  Experimental image/video conversion scratch script. It lists files in a
+  hard-coded image folder, probes JPEG files with external commands, and contains
+  unfinished AVI-to-MPG conversion logic.
+
+Parameters:
+  None. This script does not parse command-line parameters. Paths and conversion
+  commands are hard-coded in the file.
+"""
+
 import glob
 import os
 import sys
@@ -45,4 +56,4 @@ for sourceVideo in files:
     output1 = Popen(cmdLine, stdout=PIPE).communicate()[0]
     print output1
     output2 = Popen(['del', sourceVideo], stdout=PIPE).communicate()[0]
-    print output2        
+    print output2

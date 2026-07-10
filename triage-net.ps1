@@ -1,5 +1,17 @@
-# Network triage — active connections with owning process names
-# Usage: powershell -ExecutionPolicy Bypass -File triage-net.ps1
+<#
+.SYNOPSIS
+Prints a quick network triage report.
+
+.DESCRIPTION
+Shows established TCP connections with owning process names, local listening
+ports, and non-browser external connections that may deserve a closer look.
+
+.PARAMETER None
+This script does not accept command-line parameters.
+
+.EXAMPLE
+powershell -ExecutionPolicy Bypass -File triage-net.ps1
+#>
 
 Write-Host "`n=== ACTIVE NETWORK CONNECTIONS ===" -ForegroundColor Cyan
 

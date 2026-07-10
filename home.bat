@@ -1,3 +1,9 @@
+@rem Summary:
+@rem   Sets Java and Maven environment variables, prepends them to PATH, switches
+@rem   to drive C:, and changes to the c:\dev\git workspace.
+@rem Parameters:
+@rem   None. This script does not read command-line arguments.
+
 rem set JAVA_HOME=c:\tools\jdk-25.0.2
 set JAVA_HOME=c:\tools\jdk-21.0.10
 set MAVEN_HOME=c:\tools\apache-maven-3.9.14
