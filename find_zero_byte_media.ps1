@@ -4,22 +4,35 @@ Finds zero-byte media files under a folder.
 
 .DESCRIPTION
 Recursively scans the selected root folder for known photo, video, and audio
-extensions whose file size is 0 bytes. The script is read-only and writes both
-text and CSV reports in the current directory.
+extensions whose file size is 0 bytes. Writes text and CSV reports.
+Optionally moves or deletes the files found.
 
-.PARAMETER Root
-Optional. Folder to scan recursively. Defaults to the current folder.
-
-.EXAMPLE
-.\find_zero_byte_media.ps1
-
-.EXAMPLE
-.\find_zero_byte_media.ps1 -Root D:\Media
+Usage (no -File needed):
+  powershell c:\tools\bin\find_zero_byte_media.ps1 -Root D:\Media -MoveTo D:\Quarantine
+  powershell c:\tools\bin\find_zero_byte_media.ps1 -Root D:\Media -Delete
 #>
 
-param(
-    [string]$Root = '.'
-)
+# No param() block: without param(), $args receives all arguments regardless
+# of whether the script is called with or without the -File flag.
+$Root   = '.'
+$MoveTo = ''
+$Delete = $false
+
+$i = 0
+while ($i -lt $args.Count) {
+    $key = ($args[$i] -replace '^[-/]+', '').ToLower()
+    switch ($key) {
+        'root'   { $i++; $Root   = $args[$i] }
+        'moveto' { $i++; $MoveTo = $args[$i] }
+        'delete' { $Delete = $true }
+    }
+    $i++
+}
+
+if ($Delete -and $MoveTo) {
+    Write-Host "ERROR: -Delete and -MoveTo cannot be used together."
+    exit 1
+}
 
 $mediaExts = @(
     '.jpg', '.jpeg', '.jpe', '.png', '.gif', '.bmp',
@@ -35,8 +48,8 @@ $outFile   = "zero_byte_media_$timestamp.txt"
 $csvFile   = "zero_byte_media_$timestamp.csv"
 
 Write-Host "Scanning: $Root"
-Write-Host "Output text: $outFile"
-Write-Host "Output CSV:  $csvFile"
+if ($MoveTo) { Write-Host "Move to:  $MoveTo" }
+if ($Delete) { Write-Host "Action:   DELETE" }
 Write-Host ""
 
 $zeroFiles = @(
@@ -53,17 +66,58 @@ $zeroFiles | ForEach-Object { $_.FullName } | Set-Content -Path $outFile -Encodi
 $zeroFiles | ForEach-Object { '"' + $_.FullName.Replace('"', '""') + '"' } |
     Add-Content -Path $csvFile -Encoding UTF8
 
-Write-Host ""
-Write-Host "Found $count zero-byte media files."
+Write-Host "Found $count zero-byte media file(s)."
 Write-Host ""
 
-if ($count -gt 0) {
-    Write-Host "First 50:"
-    $zeroFiles | Select-Object -First 50 | ForEach-Object { Write-Host $_.FullName }
-    Write-Host ""
-    Write-Host "Full list saved to:"
-    Write-Host "  $outFile"
-    Write-Host "  $csvFile"
-} else {
+if ($count -eq 0) {
     Write-Host "No zero-byte media files found."
+    exit 0
+}
+
+Write-Host "First 50:"
+$zeroFiles | Select-Object -First 50 | ForEach-Object { Write-Host $_.FullName }
+Write-Host ""
+Write-Host "Full list saved to:"
+Write-Host "  $outFile"
+Write-Host "  $csvFile"
+Write-Host ""
+
+if ($MoveTo) {
+    $absRoot = (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\', '/')
+    $absDest = [System.IO.Path]::GetFullPath($MoveTo)
+    Write-Host "Moving $count file(s) to: $absDest"
+    $moved  = 0
+    $failed = 0
+    foreach ($f in $zeroFiles) {
+        $rel      = $f.FullName.Substring($absRoot.Length).TrimStart('\', '/')
+        $destPath = Join-Path $absDest $rel
+        $destDir  = Split-Path $destPath -Parent
+        try {
+            if (-not (Test-Path $destDir)) {
+                New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+            }
+            Move-Item -LiteralPath $f.FullName -Destination $destPath -Force
+            $moved++
+        } catch {
+            Write-Host "WARN: Could not move $($f.FullName): $_"
+            $failed++
+        }
+    }
+    Write-Host "Done. Moved: $moved  Failed: $failed"
+}
+
+if ($Delete) {
+    Write-Host "Deleting $count file(s)..."
+    $deleted = 0
+    $failed  = 0
+    foreach ($f in $zeroFiles) {
+        try {
+            Remove-Item -LiteralPath $f.FullName -Force
+            $deleted++
+        } catch {
+            Write-Host "WARN: Could not delete $($f.FullName): $_"
+            $failed++
+        }
+    }
+    Write-Host "Done. Deleted: $deleted  Failed: $failed"
 }
