@@ -17,6 +17,7 @@ Usage (no -File needed):
 $Root   = '.'
 $MoveTo = ''
 $Delete = $false
+$Help   = $false
 
 $i = 0
 while ($i -lt $args.Count) {
@@ -25,8 +26,45 @@ while ($i -lt $args.Count) {
         'root'   { $i++; $Root   = $args[$i] }
         'moveto' { $i++; $MoveTo = $args[$i] }
         'delete' { $Delete = $true }
+        { $_ -in 'help','h','?' } { $Help = $true }
     }
     $i++
+}
+
+if ($Help -or $args.Count -eq 0) {
+    Write-Host ""
+    Write-Host "find_zero_byte_media.ps1"
+    Write-Host "------------------------"
+    Write-Host "Scans a folder tree for media files that are 0 bytes in size."
+    Write-Host "Writes a .txt and .csv report of every zero-byte file found."
+    Write-Host "Optionally moves or deletes them."
+    Write-Host ""
+    Write-Host "USAGE"
+    Write-Host "  powershell c:\tools\bin\find_zero_byte_media.ps1 -Root <path> [options]"
+    Write-Host ""
+    Write-Host "PARAMETERS"
+    Write-Host "  -Root <path>     Folder to scan. Defaults to current directory."
+    Write-Host "  -MoveTo <path>   Move zero-byte files here, preserving folder structure."
+    Write-Host "  -Delete          Permanently delete all zero-byte files found."
+    Write-Host "  -Help            Show this help message."
+    Write-Host ""
+    Write-Host "NOTES"
+    Write-Host "  -MoveTo and -Delete cannot be used together."
+    Write-Host "  Without -MoveTo or -Delete the script reports only - nothing is changed."
+    Write-Host "  Supported types: jpg jpeg png gif bmp tif webp heic raw dng cr2 nef arw"
+    Write-Host "                   mov mp4 avi mkv wmv mpg 3gp mts mp3 m4a wav flac aiff"
+    Write-Host ""
+    Write-Host "EXAMPLES"
+    Write-Host "  # Report only"
+    Write-Host "  powershell c:\tools\bin\find_zero_byte_media.ps1 -Root F:\Photos"
+    Write-Host ""
+    Write-Host "  # Move zero-byte files to a quarantine folder"
+    Write-Host "  powershell c:\tools\bin\find_zero_byte_media.ps1 -Root F:\Photos -MoveTo F:\ZeroByte"
+    Write-Host ""
+    Write-Host "  # Delete zero-byte files"
+    Write-Host "  powershell c:\tools\bin\find_zero_byte_media.ps1 -Root F:\Photos -Delete"
+    Write-Host ""
+    exit 0
 }
 
 if ($Delete -and $MoveTo) {
