@@ -35,14 +35,25 @@
     - Close all programs that are using the drive before running.
 #>
 
+[CmdletBinding(DefaultParameterSetName = 'Run')]
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(ParameterSetName = 'Help')]
+    [Alias('h', '?')]
+    [switch]$Help,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Run')]
     [ValidatePattern('^[A-Za-z]:?$')]
     [string]$DriveLetter,
 
+    [Parameter(ParameterSetName = 'Run')]
     [ValidateRange(512, 8192)]
     [int]$TestSizeMB = 2048
 )
+
+if ($Help) {
+    Get-Help $MyInvocation.MyCommand.Path -Detailed
+    exit
+}
 
 $ErrorActionPreference = "Stop"
 
