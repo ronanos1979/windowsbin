@@ -138,13 +138,14 @@ try {
     # READ TEST
     Write-Host "Running read test..."
 
+    # NoBuffering bypasses the OS file cache so we measure the USB link, not RAM.
     $readStream = [System.IO.FileStream]::new(
         $TestFile,
         [System.IO.FileMode]::Open,
         [System.IO.FileAccess]::Read,
         [System.IO.FileShare]::Read,
         $bufferSize,
-        [System.IO.FileOptions]::SequentialScan
+        [System.IO.FileOptions]::NoBuffering
     )
 
     $readWatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -163,7 +164,7 @@ try {
 
     $readMBps = ($readTotal / 1MB) / $readWatch.Elapsed.TotalSeconds
 
-    $bestSpeed = [math]::Max($writeMBps, $readMBps)
+    $bottleneck = [math]::Min($writeMBps, $readMBps)
 
     Write-Host ""
     Write-Host "========== RESULTS =========="
@@ -171,15 +172,15 @@ try {
     Write-Host ("Read speed:  {0:N1} MB/s" -f $readMBps)
     Write-Host ""
 
-    if ($bestSpeed -ge 80) {
+    if ($bottleneck -ge 80) {
         Write-Host "Result: The connection is operating at USB 3.x speed." -ForegroundColor Green
         Write-Host "This cable is very likely USB 3-capable."
     }
-    elseif ($bestSpeed -ge 50) {
+    elseif ($bottleneck -ge 50) {
         Write-Host "Result: Probably USB 3.x, but not conclusive." -ForegroundColor Yellow
         Write-Host "The drive itself may be limiting the speed."
     }
-    elseif ($bestSpeed -ge 25) {
+    elseif ($bottleneck -ge 25) {
         Write-Host "Result: USB 2.0 speed or a slow drive." -ForegroundColor Yellow
         Write-Host "Retest using a fast external SSD for a definitive result."
     }
