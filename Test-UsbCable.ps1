@@ -1,16 +1,38 @@
 <#
-Tests the effective speed of an external-drive USB cable.
+.SYNOPSIS
+    Tests the effective speed of a USB cable by benchmarking an external drive.
 
-Run PowerShell as Administrator if access is denied.
+.DESCRIPTION
+    Writes and reads a temporary file on the target drive using direct I/O, then
+    reports write and read speeds in MB/s. The result indicates whether the cable
+    is operating at USB 2.0 or USB 3.x speed.
 
-Example:
+    The temporary file is always deleted when the script exits, even on error.
+
+    Run PowerShell as Administrator if access is denied.
+
+.PARAMETER DriveLetter
+    The drive letter of the external drive to test (e.g. E or E:).
+
+.PARAMETER TestSizeMB
+    Size of the temporary test file in megabytes. Must be between 512 and 8192.
+    Defaults to 2048 (2 GB). Larger values give more accurate results.
+
+.EXAMPLE
     .\Test-UsbCable.ps1 -DriveLetter E
 
-Important:
-- Use the same external drive for every cable.
-- Use the same known USB 3.x port for every test.
-- Close programs using the drive.
-- The script creates and deletes a temporary 2 GB file.
+    Tests the USB cable connected to drive E: using a 2 GB test file.
+
+.EXAMPLE
+    .\Test-UsbCable.ps1 -DriveLetter F -TestSizeMB 512
+
+    Tests drive F: with a smaller 512 MB file for a quicker result.
+
+.NOTES
+    For consistent cable comparisons:
+    - Use the same external drive for every cable tested.
+    - Use the same known USB 3.x port for every test.
+    - Close all programs that are using the drive before running.
 #>
 
 param(
