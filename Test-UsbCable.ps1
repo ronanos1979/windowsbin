@@ -119,7 +119,7 @@ try {
 
     while ($written -lt $totalBytes) {
         $remaining = $totalBytes - $written
-        $bytesToWrite = [int][math]::Min($buffer.Length, $remaining)
+        $bytesToWrite = [int][math]::Min([int64]$buffer.Length, $remaining)
 
         $writeStream.Write($buffer, 0, $bytesToWrite)
         $written += $bytesToWrite
