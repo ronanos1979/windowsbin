@@ -40,55 +40,77 @@ while ($i -lt $args.Count) {
 }
 
 if ($Help -or $args.Count -eq 0) {
-    Write-Host ""
-    Write-Host "scan_drive_md5.ps1"
-    Write-Host "------------------"
-    Write-Host "Scans all files under a path and writes a CSV with MD5 hashes and"
-    Write-Host "file metadata for import into a PostgreSQL database."
-    Write-Host ""
-    Write-Host "USAGE"
-    Write-Host "  powershell c:\tools\bin\scan_drive_md5.ps1 -Root <path> [options]"
-    Write-Host ""
-    Write-Host "PARAMETERS"
-    Write-Host "  -Root <path>        Path to scan (drive or folder). Required."
-    Write-Host "  -Out <path>         Output CSV file path."
-    Write-Host "                      Defaults to scan_<label>_<timestamp>.csv in current dir."
-    Write-Host "  -Label <text>       Human-readable label stored in every row (e.g. 'Seagate 4TB')."
-    Write-Host "                      Defaults to the drive letter or root folder name."
-    Write-Host "  -CacheFile <path>   Path to hash cache file. Speeds up repeat scans by"
-    Write-Host "                      reusing MD5 hashes for unchanged files."
-    Write-Host "                      Defaults to _md5_cache.json inside -Root."
-    Write-Host "  -Help               Show this help message."
-    Write-Host ""
-    Write-Host "OUTPUT CSV COLUMNS"
-    Write-Host "  ScanLabel         - label you supplied (or default) to identify the scan"
-    Write-Host "  ScannedAt         - ISO 8601 timestamp when this scan was run"
-    Write-Host "  FullPath          - absolute path to the file"
-    Write-Host "  FileName          - file name with extension"
-    Write-Host "  FileExtension     - lower-cased extension including dot (e.g. .jpg)"
-    Write-Host "  ParentDirectory   - folder containing the file"
-    Write-Host "  DriveOrVolume     - drive letter or UNC server name"
-    Write-Host "  FileSizeBytes     - file size in bytes"
-    Write-Host "  MD5Hash           - MD5 hex digest of file contents"
-    Write-Host "  FileCreatedAt     - file creation timestamp (local time)"
-    Write-Host "  FileModifiedAt    - last-write timestamp (local time)"
-    Write-Host "  IsHidden          - true/false"
-    Write-Host "  IsReadOnly        - true/false"
-    Write-Host ""
-    Write-Host "IMPORT INTO POSTGRESQL"
-    Write-Host "  Run create_file_inventory.sql to create the table, then:"
-    Write-Host "  \COPY file_inventory FROM 'scan.csv' WITH (FORMAT CSV, HEADER TRUE, ENCODING 'UTF8');"
-    Write-Host ""
-    Write-Host "EXAMPLES"
-    Write-Host "  # Scan an entire drive"
-    Write-Host "  powershell c:\tools\bin\scan_drive_md5.ps1 -Root F:\"
-    Write-Host ""
-    Write-Host "  # Scan with a friendly label and fixed output path"
-    Write-Host "  powershell c:\tools\bin\scan_drive_md5.ps1 -Root F:\ -Label ""Seagate 4TB"" -Out F:\scan.csv"
-    Write-Host ""
-    Write-Host "  # Re-scan quickly using cached hashes from last run"
-    Write-Host "  powershell c:\tools\bin\scan_drive_md5.ps1 -Root F:\ -CacheFile F:\hash_cache.json"
-    Write-Host ""
+    Write-Host @'
+
+scan_drive_md5.ps1
+------------------
+Scans all files under a path and writes a CSV with MD5 hashes and
+file metadata for import into a PostgreSQL database.
+
+USAGE
+  powershell c:\tools\bin\scan_drive_md5.ps1 -Root <path> [options]
+
+PARAMETERS
+  -Root <path>        Path to scan (drive or folder). Required.
+  -Out <path>         Output CSV file path.
+                      Defaults to scan_<label>_<timestamp>.csv in current dir.
+  -Label <text>       Human-readable label stored in every row (e.g. 'Seagate 4TB').
+                      Defaults to the drive letter or root folder name.
+  -CacheFile <path>   Path to hash cache file. Speeds up repeat scans by
+                      reusing MD5 hashes for unchanged files.
+                      Defaults to _md5_cache.json inside -Root.
+  -Help               Show this help message.
+
+OUTPUT CSV COLUMNS
+  ScanLabel         - label you supplied (or default) to identify the scan
+  ScannedAt         - ISO 8601 timestamp when this scan was run
+  FullPath          - absolute path to the file
+  FileName          - file name with extension
+  FileExtension     - lower-cased extension including dot (e.g. .jpg)
+  ParentDirectory   - folder containing the file
+  DriveOrVolume     - drive letter or UNC server name
+  FileSizeBytes     - file size in bytes
+  MD5Hash           - MD5 hex digest of file contents
+  FileCreatedAt     - file creation timestamp (local time)
+  FileModifiedAt    - last-write timestamp (local time)
+  IsHidden          - true/false
+  IsReadOnly        - true/false
+
+IMPORT INTO POSTGRESQL
+  1. Create the table (first time only):
+       psql -d <dbname> -U postgres -f c:\tools\bin\create_file_inventory.sql
+
+  2. Import the CSV — you MUST list the columns explicitly (the table has an
+     auto-generated 'id' column that is not in the CSV):
+
+       psql -d <dbname> -U postgres -c "\COPY file_inventory
+         (scan_label, scanned_at, full_path, file_name, file_extension,
+          parent_directory, drive_or_volume, file_size_bytes, md5_hash,
+          file_created_at, file_modified_at, is_hidden, is_readonly)
+         FROM 'F:\scan.csv' WITH (FORMAT CSV, HEADER TRUE, ENCODING 'UTF8')"
+
+  3. To load multiple drives into the same table for cross-drive comparison,
+     repeat step 2 for each CSV — rows are appended, not overwritten.
+     Use -Label when scanning to tell drives apart (e.g. 'Seagate 4TB').
+     Do NOT re-run create_file_inventory.sql between imports — it drops the table.
+
+  NOTE: The CSV is written without a UTF-8 BOM so PostgreSQL can read it
+  directly. If you have older CSVs with a BOM (visible as garbled characters
+  at the start of the file), strip it first in PowerShell:
+    $c = [IO.File]::ReadAllText('F:\scan.csv')
+    [IO.File]::WriteAllText('F:\scan_nobom.csv', $c, [Text.UTF8Encoding]::new($false))
+
+EXAMPLES
+  # Scan an entire drive
+  powershell c:\tools\bin\scan_drive_md5.ps1 -Root F:\
+
+  # Scan with a friendly label and fixed output path
+  powershell c:\tools\bin\scan_drive_md5.ps1 -Root F:\ -Label "Seagate 4TB" -Out F:\scan.csv
+
+  # Re-scan quickly using cached hashes from last run
+  powershell c:\tools\bin\scan_drive_md5.ps1 -Root F:\ -CacheFile F:\hash_cache.json
+
+'@
     exit 0
 }
 
@@ -236,7 +258,7 @@ try {
 # 4. Write CSV
 # -----------------------------------------------------------------------
 Write-Host "Writing CSV ($($rows.Count) rows) to: $Out"
-$rows | Export-Csv -LiteralPath $Out -NoTypeInformation -Encoding UTF8
+$rows | Export-Csv -LiteralPath $Out -NoTypeInformation -Encoding utf8NoBOM
 
 Write-Host ""
 Write-Host "Done."
@@ -245,4 +267,4 @@ Write-Host "  Files skipped:  $skipped"
 Write-Host "  Output:         $Out"
 Write-Host ""
 Write-Host "To import into PostgreSQL:"
-Write-Host "  psql -d <dbname> -c ""\COPY file_inventory FROM '$Out' WITH (FORMAT CSV, HEADER TRUE, ENCODING 'UTF8')"""
+Write-Host "  psql -d `<dbname`> -U postgres -c `"\COPY file_inventory (scan_label, scanned_at, full_path, file_name, file_extension, parent_directory, drive_or_volume, file_size_bytes, md5_hash, file_created_at, file_modified_at, is_hidden, is_readonly) FROM '$Out' WITH (FORMAT CSV, HEADER TRUE, ENCODING 'UTF8')`""
