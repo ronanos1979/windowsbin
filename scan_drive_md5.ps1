@@ -110,6 +110,43 @@ EXAMPLES
   # Re-scan quickly using cached hashes from last run
   powershell c:\tools\bin\scan_drive_md5.ps1 -Root F:\ -CacheFile F:\hash_cache.json
 
+FIND DUPLICATES (run in psql after importing)
+  -- Grouped summary: one row per duplicate hash, all file paths in an array,
+  -- ordered by wasted space (largest waste first).
+  -- To limit to one drive add: AND scan_label = 'F:' in the WHERE clause.
+
+  SELECT
+      md5_hash,
+      file_size_bytes,
+      COUNT(*)                                          AS copies,
+      pg_size_pretty(file_size_bytes * (COUNT(*) - 1)) AS wasted_space,
+      array_agg(full_path ORDER BY full_path)           AS paths
+  FROM file_inventory
+  WHERE file_size_bytes > 0
+  GROUP BY md5_hash, file_size_bytes
+  HAVING COUNT(*) > 1
+  ORDER BY file_size_bytes * (COUNT(*) - 1) DESC;
+
+  -- Flat list: one row per duplicate file (useful for scripting or deletion).
+  -- To limit to one drive add: AND scan_label = 'F:' inside the subquery.
+
+  SELECT
+      md5_hash,
+      file_size_bytes,
+      COUNT(*) OVER (PARTITION BY md5_hash) AS copy_count,
+      full_path,
+      file_name,
+      file_modified_at,
+      scan_label
+  FROM file_inventory
+  WHERE file_size_bytes > 0
+    AND md5_hash IN (
+        SELECT md5_hash FROM file_inventory
+        WHERE file_size_bytes > 0
+        GROUP BY md5_hash HAVING COUNT(*) > 1
+    )
+  ORDER BY md5_hash, full_path;
+
 '@
     exit 0
 }
@@ -207,7 +244,8 @@ foreach ($f in $allFiles) {
                 $h = $entry.Hash
                 $cacheHits++
             } else {
-                $h = (Get-FileHash -LiteralPath $f.FullName -Algorithm MD5 -ErrorAction Stop).Hash.ToLower()
+                $hashPath = if ($f.FullName.Length -ge 260) { '\\?\' + $f.FullName } else { $f.FullName }
+                $h = (Get-FileHash -LiteralPath $hashPath -Algorithm MD5 -ErrorAction Stop).Hash.ToLower()
                 $hashCache[$f.FullName] = [PSCustomObject]@{
                     Size  = $f.Length
                     Mtime = $f.LastWriteTime.Ticks
@@ -258,7 +296,8 @@ try {
 # 4. Write CSV
 # -----------------------------------------------------------------------
 Write-Host "Writing CSV ($($rows.Count) rows) to: $Out"
-$rows | Export-Csv -LiteralPath $Out -NoTypeInformation -Encoding utf8NoBOM
+$csvContent = $rows | ConvertTo-Csv -NoTypeInformation
+[System.IO.File]::WriteAllLines($Out, $csvContent, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host ""
 Write-Host "Done."

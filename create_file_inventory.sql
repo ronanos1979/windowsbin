@@ -42,8 +42,14 @@ CREATE INDEX idx_fi_hash_size   ON file_inventory (md5_hash, file_size_bytes);
 -- Hash-only lookups (e.g. "does this file exist anywhere?")
 CREATE INDEX idx_fi_hash        ON file_inventory (md5_hash);
 
--- Path lookups
-CREATE INDEX idx_fi_full_path   ON file_inventory (full_path);
+-- Path lookups (equality / ORDER BY)
+CREATE INDEX idx_fi_full_path         ON file_inventory (full_path);
+
+-- Case-insensitive prefix matching (ILIKE 'prefix%').
+-- A plain B-tree index cannot satisfy ILIKE; this functional index on lower()
+-- with text_pattern_ops allows queries of the form:
+--   WHERE lower(full_path) LIKE 'f:\sortoutall%'
+CREATE INDEX idx_fi_full_path_lower   ON file_inventory (lower(full_path) text_pattern_ops);
 
 -- Extension filtering (e.g. "show me all .mp4 duplicates")
 CREATE INDEX idx_fi_extension   ON file_inventory (file_extension);
