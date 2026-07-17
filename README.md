@@ -205,6 +205,102 @@ WHERE lower(s.full_path) LIKE 'f:\\20220422%'
 ORDER BY s.full_path;
 ```
 
+### Find date-folder duplicates that have an album-folder original
+
+Files where one copy sits in a date-structured path (`\YYYY\MM-Month\YYYY-MM-DD\`)
+and an identical copy (same MD5 + size) exists in a named-album path
+(`\YYYY\AlbumName\`). The album copy is the original to keep; the date-folder
+copy is moved by `move_sortoutall_dups.ps1`.
+
+The regex `\\[0-9]{4}-[0-9]{2}-[0-9]{2}` matches any folder component that looks
+like a `YYYY-MM-DD` date. Paths without such a component are treated as album paths.
+
+**Inspect** — shows what would be moved with its album original:
+
+```sql
+SELECT DISTINCT ON (s.full_path)
+    s.full_path    AS file_to_move,
+    s.file_size_bytes,
+    s.md5_hash,
+    o.full_path    AS original_kept
+FROM file_inventory s
+JOIN file_inventory o
+    ON  o.md5_hash        = s.md5_hash
+    AND o.file_size_bytes = s.file_size_bytes
+    AND o.full_path      != s.full_path
+    AND o.parent_directory !~ '\\[0-9]{4}-[0-9]{2}-[0-9]{2}'
+WHERE s.file_size_bytes > 0
+  AND s.parent_directory ~ '\\[0-9]{4}-[0-9]{2}-[0-9]{2}'
+ORDER BY s.full_path, o.full_path;
+```
+
+**List only** — just the paths to move:
+
+```sql
+SELECT DISTINCT s.full_path AS file_to_move
+FROM file_inventory s
+WHERE s.file_size_bytes > 0
+  AND s.parent_directory ~ '\\[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  AND EXISTS (
+      SELECT 1 FROM file_inventory o
+      WHERE o.md5_hash        = s.md5_hash
+        AND o.file_size_bytes = s.file_size_bytes
+        AND o.full_path      != s.full_path
+        AND o.parent_directory !~ '\\[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  )
+ORDER BY s.full_path;
+```
+
+### Find Pictures/Videos cross-folder duplicates
+
+Two rules govern which copy to move when a file exists in both a Pictures and a
+Videos folder:
+
+- **Pictures date path + Videos**: the Pictures copy is in a `YYYY-MM-DD` date
+  folder (created by an automated script). Move it; keep the Videos copy.
+- **Pictures album path + Videos**: the Pictures copy is in a named album (no
+  `YYYY-MM-DD` component). Move the Videos copy; keep the Pictures copy.
+
+**Case 6 — move Pictures date copy, keep Videos copy:**
+
+```sql
+SELECT DISTINCT ON (s.full_path)
+    s.full_path    AS file_to_move,
+    s.file_size_bytes,
+    s.md5_hash,
+    o.full_path    AS original_kept
+FROM file_inventory s
+JOIN file_inventory o
+    ON  o.md5_hash        = s.md5_hash
+    AND o.file_size_bytes = s.file_size_bytes
+    AND o.full_path      != s.full_path
+    AND lower(o.full_path) LIKE '%\\videos\\%'
+WHERE s.file_size_bytes > 0
+  AND lower(s.full_path) LIKE '%\\pictures\\%'
+  AND s.parent_directory ~ '\\[0-9]{4}-[0-9]{2}-[0-9]{2}'
+ORDER BY s.full_path, o.full_path;
+```
+
+**Case 7 — move Videos copy, keep Pictures album copy:**
+
+```sql
+SELECT DISTINCT ON (s.full_path)
+    s.full_path    AS file_to_move,
+    s.file_size_bytes,
+    s.md5_hash,
+    o.full_path    AS original_kept
+FROM file_inventory s
+JOIN file_inventory o
+    ON  o.md5_hash        = s.md5_hash
+    AND o.file_size_bytes = s.file_size_bytes
+    AND o.full_path      != s.full_path
+    AND lower(o.full_path) LIKE '%\\pictures\\%'
+    AND o.parent_directory !~ '\\[0-9]{4}-[0-9]{2}-[0-9]{2}'
+WHERE s.file_size_bytes > 0
+  AND lower(s.full_path) LIKE '%\\videos\\%'
+ORDER BY s.full_path, o.full_path;
+```
+
 ## move_sortoutall_dups.ps1
 
 Queries the `file_inventory` table and moves two classes of file from

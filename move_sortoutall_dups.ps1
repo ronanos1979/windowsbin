@@ -3,7 +3,7 @@ Reads the file_inventory PostgreSQL table (populated by scan_drive_md5.ps1) and
 moves files from F:\SortOutAll into F:\movedoutwithdupsoutsidefinalnewsetup,
 preserving the full directory structure under F:\.
 
-Three classes of file are moved:
+Four classes of file are moved:
   1. Cross-tree duplicates: files in F:\SortOutAll that have an identical copy
      (same MD5 hash AND same file size) anywhere under F:\20220422.
   2. Within-SortOutAll duplicates: where multiple copies of the same file exist
@@ -11,6 +11,8 @@ Three classes of file are moved:
      others are moved.
   3. Files named "*identical*" inside F:\20220422 that have a duplicate with a
      normal name in the same tree. The non-identical copy is kept.
+  4. Same-directory duplicates anywhere on the drive: within each folder, files
+     with identical content keep the alphabetically-first name; all others move.
 
 Usage:
   powershell c:\tools\bin\move_sortoutall_dups.ps1 -DbName mydb
@@ -45,13 +47,27 @@ move_sortoutall_dups.ps1
 Moves files from F:\SortOutAll to F:\movedoutwithdupsoutsidefinalnewsetup,
 preserving the full directory structure under F:\.
 
-Three classes of file are moved:
+Four classes of file are moved:
   1. Cross-tree: files in F:\SortOutAll that have an identical copy (same MD5
      + size) anywhere under F:\20220422.
   2. Within-SortOutAll: files duplicated entirely inside F:\SortOutAll. The
      alphabetically-first copy is kept; all others are moved.
   3. Named "*identical*" inside F:\20220422: moved when a non-identical copy
      with the same MD5 + size exists in the same tree.
+  4. Same-directory duplicates anywhere on the drive: alphabetically-first
+     filename is kept, all others are moved.
+  5. Date-folder copies when an album-folder original exists: the copy in a
+     YYYY-MM-DD date folder is moved; the copy in a named album is kept.
+  6. Pictures date-folder copy + Videos copy: move the Pictures copy.
+  7. Videos copy + Pictures named album copy: move the Videos copy.
+  5. Date-folder copies that have an album-folder original: if the same file
+     exists under a named album (e.g. Pictures\2017\Christmas) AND under a
+     date folder (e.g. Pictures\2017\06-June\2017-06-15), the date-folder
+     copy is moved and the album copy is kept.
+  6. Pictures date-folder copy that also exists in a Videos folder: move the
+     Pictures copy, keep the Videos copy.
+  7. Videos copy that also exists in a Pictures named album: move the Videos
+     copy, keep the Pictures album copy.
 
 USAGE
   powershell c:\tools\bin\move_sortoutall_dups.ps1 -DbName <name> [options]
@@ -87,6 +103,7 @@ function Get-LongPath($p) {
 $tempSql = [System.IO.Path]::ChangeExtension([System.IO.Path]::GetTempFileName(), '.sql')
 $sourceLower = $SourcePrefix.ToLower() -replace '\\', '\\'
 $origLower   = $OrigPrefix.ToLower()   -replace '\\', '\\'
+$driveLower  = ($DestRoot[0].ToString().ToLower()) + ':\\'
 $sql = @"
 -- Case 1: cross-tree duplicates (copy in F:\20220422 is the original)
 SELECT DISTINCT s.full_path
@@ -130,6 +147,81 @@ WHERE lower(s.full_path) LIKE '$origLower%'
         AND o.file_size_bytes = s.file_size_bytes
         AND lower(o.full_path) LIKE '$origLower%'
         AND lower(o.file_name) NOT LIKE '%identical%'
+  )
+
+UNION
+
+-- Case 4: same-directory duplicates anywhere on the drive.
+-- Within each directory, files with identical content (same MD5 + size) are
+-- grouped; the alphabetically-first filename is kept, all others are moved.
+SELECT full_path
+FROM (
+    SELECT
+        full_path,
+        ROW_NUMBER() OVER (PARTITION BY parent_directory, md5_hash, file_size_bytes ORDER BY file_name) AS rn,
+        COUNT(*)    OVER (PARTITION BY parent_directory, md5_hash, file_size_bytes)                     AS cnt
+    FROM file_inventory
+    WHERE lower(full_path) LIKE '$driveLower%'
+      AND file_size_bytes > 0
+) x
+WHERE cnt > 1 AND rn > 1
+
+UNION
+
+-- Case 5: date-folder copy when an album-folder original exists on the same drive.
+-- Date path:  parent_directory contains a YYYY-MM-DD folder component.
+-- Album path: parent_directory has no such component (named album, e.g. Christmas).
+-- Keep the album copy; move the date-folder copy.
+SELECT DISTINCT s.full_path
+FROM file_inventory s
+WHERE lower(s.full_path) LIKE '$driveLower%'
+  AND s.file_size_bytes > 0
+  AND s.parent_directory ~ '\\[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  AND EXISTS (
+      SELECT 1 FROM file_inventory o
+      WHERE o.md5_hash        = s.md5_hash
+        AND o.file_size_bytes = s.file_size_bytes
+        AND o.full_path      != s.full_path
+        AND lower(o.full_path) LIKE '$driveLower%'
+        AND o.parent_directory !~ '\\[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  )
+
+UNION
+
+-- Case 6: file in Pictures date folder also exists in Videos folder.
+-- The Pictures copy is script-generated (date path); keep the Videos copy.
+SELECT DISTINCT s.full_path
+FROM file_inventory s
+WHERE lower(s.full_path) LIKE '$driveLower%'
+  AND s.file_size_bytes > 0
+  AND lower(s.full_path) LIKE '%\\pictures\\%'
+  AND s.parent_directory ~ '\\[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  AND EXISTS (
+      SELECT 1 FROM file_inventory o
+      WHERE o.md5_hash        = s.md5_hash
+        AND o.file_size_bytes = s.file_size_bytes
+        AND o.full_path      != s.full_path
+        AND lower(o.full_path) LIKE '$driveLower%'
+        AND lower(o.full_path) LIKE '%\\videos\\%'
+  )
+
+UNION
+
+-- Case 7: file in Videos folder also exists in a Pictures named album.
+-- The album copy is the curated original; move the Videos copy.
+SELECT DISTINCT s.full_path
+FROM file_inventory s
+WHERE lower(s.full_path) LIKE '$driveLower%'
+  AND s.file_size_bytes > 0
+  AND lower(s.full_path) LIKE '%\\videos\\%'
+  AND EXISTS (
+      SELECT 1 FROM file_inventory o
+      WHERE o.md5_hash        = s.md5_hash
+        AND o.file_size_bytes = s.file_size_bytes
+        AND o.full_path      != s.full_path
+        AND lower(o.full_path) LIKE '$driveLower%'
+        AND lower(o.full_path) LIKE '%\\pictures\\%'
+        AND o.parent_directory !~ '\\[0-9]{4}-[0-9]{2}-[0-9]{2}'
   )
 
 ORDER BY full_path;
