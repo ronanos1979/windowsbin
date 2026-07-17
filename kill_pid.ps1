@@ -1,7 +1,39 @@
 #Requires -RunAsAdministrator
+<#
+.SYNOPSIS
+Kills a process by PID.
+
+.DESCRIPTION
+Attempts a graceful close via CloseMainWindow, waits 500 ms, then force-kills
+with taskkill if the process is still running. Requires administrator privileges.
+
+.PARAMETER ProcessId
+The numeric PID of the process to kill. Required.
+
+.EXAMPLE
+.\kill_pid.ps1 -ProcessId 1234
+
+.NOTES
+If the process is a protected system process it may survive even a forced kill.
+Try running as SYSTEM or disabling Tamper Protection in that case.
+#>
+
 param(
-    [Parameter(Mandatory)][int]$ProcessId
+    [switch]$Help,
+
+    [Parameter(Mandatory=$false)]
+    [int]$ProcessId
 )
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
+
+if (-not $ProcessId) {
+    Write-Error "-ProcessId is required. Use -Help for usage information."
+    exit 1
+}
 
 $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
 if (-not $proc) {

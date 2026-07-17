@@ -13,6 +13,13 @@ This script does not accept command-line parameters.
 powershell -ExecutionPolicy Bypass -File triage.ps1
 #>
 
+param([switch]$Help)
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
+
 Write-Host "`n=== TOP PROCESSES BY CPU ===" -ForegroundColor Cyan
 Get-Process |
     Sort-Object CPU -Descending |

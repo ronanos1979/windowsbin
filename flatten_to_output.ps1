@@ -14,6 +14,13 @@ This script does not accept command-line parameters.
 .\flatten_to_output.ps1
 #>
 
+param([switch]$Help)
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
+
 $outputDir  = '.\output'
 $scriptName = Split-Path $PSCommandPath -Leaf
 $null = New-Item -ItemType Directory -Path $outputDir -Force

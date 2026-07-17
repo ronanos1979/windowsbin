@@ -40,19 +40,43 @@ dry-run previews the work. copy performs the copy.
 #>
 
 param(
-    [Parameter(Mandatory=$true)]
+    [switch]$Help,
+
+    [Parameter(Mandatory=$false)]
     [ValidateSet('dry-run','copy')]
     [string]$Mode,
 
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
     [string]$LogFile,
 
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
     [string]$OriginalDest,
 
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
     [string]$BackupDest
 )
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
+
+if (-not $Mode) {
+    Write-Error "-Mode is required (dry-run or copy). Use -Help for usage information."
+    exit 1
+}
+if (-not $LogFile) {
+    Write-Error "-LogFile is required. Use -Help for usage information."
+    exit 1
+}
+if (-not $OriginalDest) {
+    Write-Error "-OriginalDest is required. Use -Help for usage information."
+    exit 1
+}
+if (-not $BackupDest) {
+    Write-Error "-BackupDest is required. Use -Help for usage information."
+    exit 1
+}
 
 function Normalize-DirectoryPath {
     param(

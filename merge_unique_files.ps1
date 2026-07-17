@@ -39,6 +39,8 @@ Not prompted for if omitted.
 #>
 
 param(
+    [switch]$Help,
+
     [Parameter(Mandatory=$false)]
     [ValidateSet('dry-run','copy','move')]
     [string]$Mode,
@@ -52,6 +54,11 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$SecondDest
 )
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
 
 function Read-RequiredValue {
     param(

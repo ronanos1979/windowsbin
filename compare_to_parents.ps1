@@ -15,6 +15,13 @@ folder you want to compare against its parent.
 .\compare_to_parents.ps1
 #>
 
+param([switch]$Help)
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
+
 $scriptName = Split-Path $PSCommandPath -Leaf
 $files      = @(Get-ChildItem -Path . -File | Where-Object { $_.Name -ne $scriptName })
 $total      = $files.Count

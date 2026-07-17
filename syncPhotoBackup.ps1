@@ -21,9 +21,15 @@
 
 [CmdletBinding()]
 param(
+    [switch]$Help,
     [switch]$Execute,
     [switch]$VerifyHashes
 )
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"

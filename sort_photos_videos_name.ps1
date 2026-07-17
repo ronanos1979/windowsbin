@@ -19,10 +19,22 @@ Required. Allowed values: dry-run or move. dry-run previews changes; move applie
 #>
 
 param(
-    [Parameter(Mandatory=$true)]
+    [switch]$Help,
+
+    [Parameter(Mandatory=$false)]
     [ValidateSet('dry-run','move')]
     [string]$Mode
 )
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
+
+if (-not $Mode) {
+    Write-Error "-Mode is required (dry-run or move). Use -Help for usage information."
+    exit 1
+}
 
 $outputDir  = '.\output'
 $monthNames = @('','January','February','March','April','May','June',

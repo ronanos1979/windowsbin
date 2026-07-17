@@ -27,10 +27,16 @@ Optional path to write results as CSV.
 #>
 
 param(
+    [switch]$Help,
     [string]$Path = "C:\Users\$env:USERNAME\iCloudPhotos\Photos",
     [switch]$ShowMissing,
     [string]$ExportCsv
 )
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
 
 if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
     Write-Error "Directory not found: $Path"

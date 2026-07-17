@@ -15,6 +15,13 @@ list are defined inside the script.
 .\find-seagate.ps1
 #>
 
+param([switch]$Help)
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
+
 Write-Host "===== FIND SEAGATE / NETWORK DRIVE =====" -ForegroundColor Cyan
 
 Write-Host "`n===== 1. CHECK KNOWN SEAGATE IP FROM BEFORE =====" -ForegroundColor Yellow

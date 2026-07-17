@@ -13,6 +13,13 @@ This script does not accept command-line parameters.
 powershell -ExecutionPolicy Bypass -File triage-net.ps1
 #>
 
+param([switch]$Help)
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
+
 Write-Host "`n=== ACTIVE NETWORK CONNECTIONS ===" -ForegroundColor Cyan
 
 $connections = Get-NetTCPConnection -State Established |

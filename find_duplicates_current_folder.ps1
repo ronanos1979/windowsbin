@@ -14,6 +14,13 @@ This script does not accept command-line parameters.
 .\find_duplicates_current_folder.ps1
 #>
 
+param([switch]$Help)
+
+if ($Help) {
+    Get-Help $PSCommandPath -Full
+    exit 0
+}
+
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $outFile   = ".\duplicates_$timestamp.txt"
 
