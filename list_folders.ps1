@@ -1,9 +1,13 @@
 <#
 Lists all subfolders under a path, flagging any whose name matches a list of
-keywords (temp files, OS junk, device sync folders, etc).
+keywords (temp files, OS junk, Apple/Android device sync folders, backup and
+duplicate folder names, thumbnail folders, and OS recycle bins).
 
 Usage:
   powershell c:\tools\bin\list_folders.ps1 -Root "F:\20220422_FINAL_NEW_SETUP"
+  powershell c:\tools\bin\list_folders.ps1 -Root "F:\" -Help
+
+Related: move_sortoutall_dups.ps1, delete_mac_junk.ps1
 #>
 
 param(
@@ -12,15 +16,40 @@ param(
 )
 
 if ($Help) {
-    Write-Host ""
-    Write-Host "list_folders.ps1"
-    Write-Host "----------------"
-    Write-Host "Lists all subfolders under -Root, flagging names that match known"
-    Write-Host "junk/device keywords so you can review them before taking action."
-    Write-Host ""
-    Write-Host "USAGE"
-    Write-Host "  powershell c:\tools\bin\list_folders.ps1 -Root <path>"
-    Write-Host ""
+    Write-Host @'
+
+list_folders.ps1
+----------------
+Lists every subfolder under -Root, flagging names that match known junk/device
+keywords so you can review them before deleting or moving.
+
+Flagged keyword categories: temp/cache/trash, Apple/iPhone/iCloud, Android/Samsung,
+backup/archive/copy, duplicate/identical, thumbnail folders, and OS recycle bins.
+
+USAGE
+  powershell c:\tools\bin\list_folders.ps1 -Root <path>
+
+PARAMETERS
+  -Root <path>   The root folder to scan. All subfolders are listed recursively.
+  -Help          Show this help message.
+
+EXAMPLES
+  # List and flag folders under the final photo archive
+  powershell c:\tools\bin\list_folders.ps1 -Root "F:\20220422_FINAL_NEW_SETUP"
+
+  # Review a drive before running move_sortoutall_dups.ps1
+  powershell c:\tools\bin\list_folders.ps1 -Root "F:\"
+
+OUTPUT
+  Two sections are printed:
+    FLAGGED FOLDERS  — subfolders whose name matches a keyword (keyword shown in brackets)
+    ALL OTHER FOLDERS — remaining subfolders
+
+RELATED SCRIPTS
+  move_sortoutall_dups.ps1   — moves duplicate files out of flagged/duplicate trees
+  delete_mac_junk.ps1        — deletes ._* and .DS_Store Mac junk files
+
+'@
     exit 0
 }
 

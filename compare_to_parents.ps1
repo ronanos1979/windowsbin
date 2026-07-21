@@ -11,6 +11,11 @@ matching parent file.
 This script does not accept command-line parameters. Run it from the child
 folder you want to compare against its parent.
 
+.NOTES
+Related scripts:
+  find_duplicates_current_folder.ps1  — finds duplicates within the current folder
+  compare_directories.ps1             — compares two arbitrary directory trees
+
 .EXAMPLE
 .\compare_to_parents.ps1
 #>

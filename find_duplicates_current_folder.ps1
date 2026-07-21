@@ -7,6 +7,14 @@ Scans the current directory only, excluding this script, and groups duplicate
 files by matching file size and MD5 hash. Writes a timestamped text report in
 the current folder.
 
+The report lists each duplicate group with the shared size, MD5 hash, and all
+filenames in that group, followed by a summary count.
+
+Related scripts:
+  compare_to_parents.ps1   — compares files in this folder against the parent folder
+  find_duplicate_media.ps1 — full-drive duplicate scan with CSV output and cache
+  extract_duplicates.ps1   — moves or dry-runs duplicates found by find_duplicate_media.ps1
+
 .PARAMETER None
 This script does not accept command-line parameters.
 

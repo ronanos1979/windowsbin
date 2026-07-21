@@ -1,7 +1,8 @@
 @echo off
-rem Summary:
-rem   Runs triage-net.ps1 with PowerShell execution policy bypassed for this invocation.
-rem Parameters:
-rem   None. This wrapper does not read command-line arguments.
+rem Wrapper for triage-net.ps1. Runs it with ExecutionPolicy Bypass.
+rem Use /? or -help to see full help from triage-net.ps1.
+
+if /i "%~1"=="/?" powershell -ExecutionPolicy Bypass -File "%~dp0triage-net.ps1" -Help & goto :eof
+if /i "%~1"=="-help" powershell -ExecutionPolicy Bypass -File "%~dp0triage-net.ps1" -Help & goto :eof
 
 powershell -ExecutionPolicy Bypass -File "%~dp0triage-net.ps1"

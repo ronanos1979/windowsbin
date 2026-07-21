@@ -4,6 +4,22 @@
 @rem Parameters:
 @rem   None. This script does not read command-line arguments.
 
+if /i "%~1"=="/?" goto :help
+if /i "%~1"=="-help" goto :help
+goto :main
+
+:help
+echo.
+echo llair.bat
+echo ---------
+echo Sets JAVA_HOME and LEXICONLAIR_PG_PASSWORD, cd to
+echo C:\dev\git\SpringBootApps\LexiconLair, prints common Gradle/npm commands.
+echo.
+echo Note: use `call llair` to keep env vars in the current shell.
+echo Related: template.bat is the same setup for the template project.
+goto :eof
+
+:main
 rem set JAVA_HOME=c:\tools\jdk-25.0.2
 set JAVA_HOME=c:\tools\jdk-21.0.10
 set LEXICONLAIR_PG_PASSWORD=change-me
@@ -44,4 +60,3 @@ echo(
 echo taskkill ^/PID ^<pid^> ^/F
 echo(
 echo =================================================================================
-

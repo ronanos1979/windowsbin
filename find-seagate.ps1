@@ -8,8 +8,14 @@ configuration, scans the local subnet for live devices, highlights likely NAS
 hostnames, and shows current SMB mappings.
 
 .PARAMETER None
-This script does not accept command-line parameters. The known IP and hostname
-list are defined inside the script.
+This script does not accept command-line parameters. The known IP (192.168.86.111)
+and hostname list (personalcloud, seagate, seagate-personalcloud) are hardcoded
+inside the script — edit them if your NAS has a different address.
+
+.NOTES
+Related scripts:
+  Test-UsbCable.ps1      — tests USB cable speed
+  Get-UsbDriveInfo.ps1   — shows USB drive connection details
 
 .EXAMPLE
 .\find-seagate.ps1

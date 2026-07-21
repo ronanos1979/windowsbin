@@ -3,8 +3,20 @@
 Prints a quick Windows system triage report.
 
 .DESCRIPTION
-Shows top processes by CPU, memory totals, CPU load, disk health, possible remote
-access tools, and startup commands.
+Prints a quick Windows health snapshot covering:
+  - Top 20 processes by CPU usage
+  - Total / used / free RAM
+  - Current CPU load percentage
+  - Disk drive model and SMART status
+  - Running remote access tools (VNC, TeamViewer, AnyDesk, Ammyy, LogMeIn,
+    ScreenConnect, RustDesk, Parsec, Supremo, Splashtop, UltraViewer)
+  - All registered startup commands (via Win32_StartupCommand)
+
+Run directly or via the triage.bat wrapper (which sets ExecutionPolicy Bypass).
+
+Related scripts:
+  triage-net.ps1   — network triage: active TCP connections and suspicious external traffic
+  kill_pid.ps1     — gracefully close or force-kill a process by PID
 
 .PARAMETER None
 This script does not accept command-line parameters.

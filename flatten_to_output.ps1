@@ -5,7 +5,15 @@ Flattens files from the current folder tree into a single output folder.
 .DESCRIPTION
 Recursively moves files from the current directory tree into .\output, excluding
 this script and anything already under .\output. Duplicate filenames are renamed
-with a _duplicate_N suffix.
+with a _duplicate_N suffix (e.g. photo_duplicate_1.jpg, photo_duplicate_2.jpg).
+
+Run from the root of the folder tree you want to flatten. The .\output folder is
+created automatically if it does not exist. Original subfolder structure is not
+preserved — all files land at the top level of .\output.
+
+Related scripts:
+  merge_unique_files.ps1       — merges two folders keeping only unique files
+  find_duplicates_current_folder.ps1 — finds duplicates in the current folder after flattening
 
 .PARAMETER None
 This script does not accept command-line parameters.

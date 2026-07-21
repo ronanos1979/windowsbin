@@ -3,8 +3,18 @@
 Prints a quick network triage report.
 
 .DESCRIPTION
-Shows established TCP connections with owning process names, local listening
-ports, and non-browser external connections that may deserve a closer look.
+Prints a quick network health snapshot covering:
+  - All established TCP connections (remote address, port, owning process)
+  - All locally listening TCP ports
+  - Suspicious connections: established connections to non-LAN IP addresses
+    (not 127.x, 192.168.x, 10.x, 172.16-31.x) made by processes that are not
+    common browsers (Chrome, Firefox, Edge, Brave, Opera, IE)
+
+Run directly or via the triage-net.bat wrapper (which sets ExecutionPolicy Bypass).
+
+Related scripts:
+  triage.ps1     — system triage: CPU, memory, disk health, remote access tools
+  find-seagate.ps1 — scans the local subnet for a Seagate NAS or similar device
 
 .PARAMETER None
 This script does not accept command-line parameters.
