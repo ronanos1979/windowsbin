@@ -111,9 +111,14 @@ EXAMPLES
   powershell c:\tools\bin\scan_drive_md5.ps1 -Root F:\ -CacheFile F:\hash_cache.json
 
 FIND DUPLICATES (run in psql after importing)
+  Set the drive variable first, then run either query.
+  Both queries only find duplicates within the specified drive.
+
+  -- Set the drive to check (change F: to G:, H:, etc. as needed):
+  \set drive 'F:'
+
   -- Grouped summary: one row per duplicate hash, all file paths in an array,
   -- ordered by wasted space (largest waste first).
-  -- To limit to one drive add: AND scan_label = 'F:' in the WHERE clause.
 
   SELECT
       md5_hash,
@@ -123,12 +128,12 @@ FIND DUPLICATES (run in psql after importing)
       array_agg(full_path ORDER BY full_path)           AS paths
   FROM file_inventory
   WHERE file_size_bytes > 0
+    AND drive_or_volume = :'drive'
   GROUP BY md5_hash, file_size_bytes
   HAVING COUNT(*) > 1
   ORDER BY file_size_bytes * (COUNT(*) - 1) DESC;
 
   -- Flat list: one row per duplicate file (useful for scripting or deletion).
-  -- To limit to one drive add: AND scan_label = 'F:' inside the subquery.
 
   SELECT
       md5_hash,
@@ -140,9 +145,11 @@ FIND DUPLICATES (run in psql after importing)
       scan_label
   FROM file_inventory
   WHERE file_size_bytes > 0
+    AND drive_or_volume = :'drive'
     AND md5_hash IN (
         SELECT md5_hash FROM file_inventory
         WHERE file_size_bytes > 0
+          AND drive_or_volume = :'drive'
         GROUP BY md5_hash HAVING COUNT(*) > 1
     )
   ORDER BY md5_hash, full_path;

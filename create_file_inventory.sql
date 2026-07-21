@@ -141,3 +141,108 @@ CREATE INDEX idx_fi_scan_label  ON file_inventory (scan_label);
 -- HAVING COUNT(*) > 1
 -- ORDER BY (COUNT(*) - 1) * file_size_bytes DESC
 -- LIMIT 50;
+
+
+-- -----------------------------------------------------------------------
+-- MOVE LOG TABLE
+-- Records every action taken by move_sortoutall_dups.ps1.
+-- This table is append-only — do NOT drop/recreate it between runs.
+-- Run create_file_inventory.sql only once; use this block separately
+-- if you need to create move_log on an existing database.
+-- -----------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS move_log (
+    id             BIGSERIAL   PRIMARY KEY,
+
+    -- Run identity (all rows from one script execution share these)
+    run_id         TEXT        NOT NULL,   -- YYYYMMDD_HHMMSS of run start
+    run_started_at TIMESTAMP   NOT NULL,   -- exact start time of the run
+    whatif         BOOLEAN     NOT NULL,   -- true = dry run, no actual move
+    db_name        TEXT        NOT NULL,   -- -DbName value used
+    log_file       TEXT,                   -- path to the text log for this run
+
+    -- Per-file action
+    acted_at       TIMESTAMP   NOT NULL,   -- when this row was written
+    outcome        TEXT        NOT NULL,   -- MOVED | WHATIF | MISSING | EXISTS | ERROR
+    source_path    TEXT        NOT NULL,   -- original file path
+    dest_path      TEXT        NOT NULL,   -- intended destination path
+    error_detail   TEXT                    -- populated for ERROR outcome only
+);
+
+CREATE INDEX IF NOT EXISTS idx_ml_run_id      ON move_log (run_id);
+CREATE INDEX IF NOT EXISTS idx_ml_source_path ON move_log (source_path);
+CREATE INDEX IF NOT EXISTS idx_ml_outcome     ON move_log (outcome);
+CREATE INDEX IF NOT EXISTS idx_ml_acted_at    ON move_log (acted_at);
+
+-- -----------------------------------------------------------------------
+-- USEFUL MOVE_LOG QUERIES
+-- -----------------------------------------------------------------------
+
+-- 1. Summary of every run (how many moved, skipped, errors, etc.)
+--
+-- SELECT
+--     run_id,
+--     run_started_at,
+--     whatif,
+--     db_name,
+--     COUNT(*)                                         AS total_files,
+--     COUNT(*) FILTER (WHERE outcome = 'MOVED')        AS moved,
+--     COUNT(*) FILTER (WHERE outcome = 'WHATIF')       AS would_move,
+--     COUNT(*) FILTER (WHERE outcome = 'EXISTS')       AS skipped_exists,
+--     COUNT(*) FILTER (WHERE outcome = 'MISSING')      AS missing_on_disk,
+--     COUNT(*) FILTER (WHERE outcome = 'ERROR')        AS errors
+-- FROM move_log
+-- GROUP BY run_id, run_started_at, whatif, db_name
+-- ORDER BY run_started_at DESC;
+
+
+-- 2. Every file moved in the most recent run.
+--
+-- SELECT source_path, dest_path, acted_at
+-- FROM move_log
+-- WHERE run_id = (SELECT run_id FROM move_log ORDER BY run_started_at DESC LIMIT 1)
+--   AND outcome = 'MOVED'
+-- ORDER BY source_path;
+
+
+-- 3. All errors across all runs.
+--
+-- SELECT run_id, run_started_at, source_path, error_detail
+-- FROM move_log
+-- WHERE outcome = 'ERROR'
+-- ORDER BY run_started_at DESC;
+
+
+-- 4. Files moved from the originals tree — cross-check against file_inventory
+--    to confirm a keeper copy still exists.
+--
+-- SELECT
+--     m.source_path                                  AS moved_file,
+--     m.run_id,
+--     m.acted_at,
+--     fi.full_path                                   AS keeper_copy
+-- FROM move_log m
+-- JOIN file_inventory fi
+--     ON  fi.md5_hash        = (SELECT md5_hash        FROM file_inventory WHERE full_path = m.source_path LIMIT 1)
+--     AND fi.file_size_bytes = (SELECT file_size_bytes FROM file_inventory WHERE full_path = m.source_path LIMIT 1)
+--     AND fi.full_path      <> m.source_path
+-- WHERE m.outcome IN ('MOVED', 'WHATIF')
+-- ORDER BY m.source_path;
+
+
+-- 5. Files that were moved but appear to have NO keeper copy in file_inventory
+--    (these may have been moved in error and should be reviewed).
+--
+-- SELECT m.source_path, m.dest_path, m.run_id, m.acted_at
+-- FROM move_log m
+-- WHERE m.outcome = 'MOVED'
+--   AND NOT EXISTS (
+--       SELECT 1
+--       FROM file_inventory fi
+--       JOIN file_inventory keeper
+--           ON  keeper.md5_hash        = fi.md5_hash
+--           AND keeper.file_size_bytes = fi.file_size_bytes
+--           AND keeper.full_path      <> fi.full_path
+--       WHERE fi.full_path = m.source_path
+--   )
+-- ORDER BY m.source_path;
