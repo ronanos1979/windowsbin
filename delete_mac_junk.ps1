@@ -6,7 +6,7 @@ Usage:
 #>
 
 param(
-    [Parameter(Mandatory)][string]$Root,
+    [string]$Root,
     [switch]$Help
 )
 
@@ -32,12 +32,20 @@ if ($Help) {
     exit 0
 }
 
+if (-not $Root) {
+    Write-Host "ERROR: -Root is required."
+    Write-Host "Run with -Help for usage information."
+    exit 1
+}
+
 if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
     Write-Host "ERROR: -Root does not exist: $Root"
     exit 1
 }
 
-$files = Get-ChildItem -LiteralPath $Root -Recurse -File -Force -ErrorAction SilentlyContinue |
+# \\?\ prefix bypasses the 260-char MAX_PATH limit for deeply nested folders
+$longRoot = if ($Root.StartsWith('\\')) { $Root } else { "\\?\$Root" }
+$files = Get-ChildItem -LiteralPath $longRoot -Recurse -File -Force -ErrorAction SilentlyContinue |
          Where-Object { $_.Name -like '._*' }
 
 if (-not $files) {
@@ -53,7 +61,8 @@ $failed  = 0
 
 foreach ($f in $files) {
     try {
-        Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop
+        $longPath = if ($f.FullName.StartsWith('\\')) { $f.FullName } else { "\\?\$($f.FullName)" }
+        Remove-Item -LiteralPath $longPath -Force -ErrorAction Stop
         Write-Host "  DELETED: $($f.FullName)"
         $deleted++
     } catch {

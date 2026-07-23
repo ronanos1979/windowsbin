@@ -67,7 +67,11 @@ param(
 
     [switch]$FallbackToFilenameDate,
 
-    [switch]$FallbackToFileDate
+    [switch]$FallbackToFolderDate,
+
+    [switch]$FallbackToFileDate,
+
+    [string]$SkippedDestination
 )
 
 $photoExts = @('.jpg','.jpeg','.heic','.heif','.png','.gif','.tif','.tiff',
@@ -75,6 +79,44 @@ $photoExts = @('.jpg','.jpeg','.heic','.heif','.png','.gif','.tif','.tiff',
 $videoExts = @('.mov','.mp4','.m4v','.avi','.mkv','.3gp','.3g2','.mts','.m2ts',
                '.mpg','.mpeg','.wmv')
 $allExts   = $photoExts + $videoExts
+
+function Show-Help {
+    Write-Host "Usage:"
+    Write-Host "  .\rename_photos_current_folder.ps1 -Mode <dry-run|rename> [options]"
+    Write-Host ""
+    Write-Host "What it does:"
+    Write-Host "  Scans the current folder for photo and video files, reads metadata dates"
+    Write-Host "  with exiftool, and renames files to YYYYMMDD_HHMMSS_originalname.ext."
+    Write-Host "  By default renames in place. Use -Destination to move files elsewhere."
+    Write-Host "  Conflicts are marked with _identical or _duplicate_diff_size suffixes."
+    Write-Host "  CSV logs are written in the current folder."
+    Write-Host ""
+    Write-Host "Parameters:"
+    Write-Host "  -Mode                   Required. dry-run previews changes; rename applies them."
+    Write-Host "  -Recurse                Scan subdirectories recursively."
+    Write-Host "  -Destination <path>     Move renamed files here instead of renaming in place."
+    Write-Host "  -PreserveStructure      Mirror source subfolder layout under -Destination."
+    Write-Host "  -FallbackToFilenameDate Parse date from filename when no metadata date found."
+    Write-Host "                          Supports: YYYY-MM-DD_HH-MM-SS, YYYYMMDD_HHMMSS,"
+    Write-Host "                          YYYY-MM-DD-HH-MM-SS, YYYY-MM-DD, YYYYMMDD at start."
+    Write-Host "  -FallbackToFolderDate   Parse date from parent folder name when no metadata"
+    Write-Host "                          or filename date is found. Handles patterns like"
+    Write-Host "                          'August 6, 2020' or 'Boston, February 14, 2020'."
+    Write-Host "  -FallbackToFileDate     Use filesystem creation time when no metadata date"
+    Write-Host "                          (or filename/folder date) is found."
+    Write-Host "  -SkippedDestination     Move files with no date to this folder instead of"
+    Write-Host "                          just logging them. Files are renamed with _noexif"
+    Write-Host "                          suffix and a counter if names collide."
+    Write-Host "  -Help                   Show this help and exit."
+    Write-Host ""
+    Write-Host "Examples:"
+    Write-Host "  .\rename_photos_current_folder.ps1 -Mode dry-run"
+    Write-Host "  .\rename_photos_current_folder.ps1 -Mode rename -Recurse"
+    Write-Host "  .\rename_photos_current_folder.ps1 -Mode rename -Destination D:\Sorted"
+    Write-Host "  .\rename_photos_current_folder.ps1 -Mode rename -Recurse -Destination D:\Sorted -PreserveStructure"
+    Write-Host ""
+    Write-Host "Requires exiftool. Install with: winget install OliverBetz.ExifTool"
+}
 
 function Test-ExifTool {
     if (-not (Get-Command exiftool -ErrorAction SilentlyContinue)) {
@@ -85,8 +127,8 @@ function Test-ExifTool {
 
 function Get-DateFromFilename([string]$stem) {
     $candidate = $null
-    # YYYY-MM-DD_HH-MM-SS  or  YYYY-MM-DD HH:MM:SS  or  YYYY-MM-DDTHH-MM-SS
-    if ($stem -match '((?:19|20)\d{2})[_\-](\d{2})[_\-](\d{2})[T _](\d{2})[.\-:](\d{2})[.\-:](\d{2})') {
+    # YYYY-MM-DD_HH-MM-SS  or  YYYY-MM-DD HH:MM:SS  or  YYYY-MM-DDTHH-MM-SS  or  YYYY-MM-DD-HH-MM-SS
+    if ($stem -match '((?:19|20)\d{2})[_\-](\d{2})[_\-](\d{2})[T _\-](\d{2})[.\-:](\d{2})[.\-:](\d{2})') {
         $candidate = "$($Matches[1])-$($Matches[2])-$($Matches[3]) $($Matches[4]):$($Matches[5]):$($Matches[6])"
     }
     # YYYYMMDD_HHMMSS
@@ -110,27 +152,54 @@ function Get-DateFromFilename([string]$stem) {
     }
 }
 
+function Get-DateFromFolderName([string]$file) {
+    $months = @{
+        'January'=1;'February'=2;'March'=3;'April'=4;'May'=5;'June'=6
+        'July'=7;'August'=8;'September'=9;'October'=10;'November'=11;'December'=12
+    }
+    $dirName = Split-Path ([System.IO.Path]::GetDirectoryName($file)) -Leaf
+    # Matches: "August 6, 2020"  or  "Boston, February 14, 2020"  or  "Home, July 5, 2020"
+    if ($dirName -match '(?:^|,\s*)(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s*((?:19|20)\d{2})\s*$') {
+        $candidate = '{0:D4}-{1:D2}-{2:D2} 00:00:00' -f [int]$Matches[3], $months[$Matches[1]], [int]$Matches[2]
+        try {
+            [datetime]::ParseExact($candidate, 'yyyy-MM-dd HH:mm:ss', $null) | Out-Null
+            return $candidate
+        } catch {
+            return $null
+        }
+    }
+    return $null
+}
+
 function Get-MetadataDate([string]$file) {
     # 1. Embedded EXIF/video metadata
     $lines = exiftool -s3 -d "%Y-%m-%d %H:%M:%S" `
         -DateTimeOriginal -SubSecDateTimeOriginal -CreateDate `
         -MediaCreateDate -TrackCreateDate -CreationDate $file 2>$null
     foreach ($line in $lines) {
-        $line = $line.Trim()
-        if ($line) { return $line }
+        $line = $line.Trim() -replace '[+-]\d{2}:\d{2}$', ''
+        if ($line -and $line.Substring(0,4) -ne '0000') {
+            return [PSCustomObject]@{ Date = $line; Source = 'exif' }
+        }
     }
 
     # 2. Parse date from filename
     if ($script:FallbackToFilenameDate) {
         $stem = [System.IO.Path]::GetFileNameWithoutExtension($file)
         $d = Get-DateFromFilename $stem
-        if ($d) { return $d }
+        if ($d) { return [PSCustomObject]@{ Date = $d; Source = 'filename' } }
     }
 
-    # 3. Filesystem creation time
+    # 3. Parse date from parent folder name
+    if ($script:FallbackToFolderDate) {
+        $d = Get-DateFromFolderName $file
+        if ($d) { return [PSCustomObject]@{ Date = $d; Source = 'folder' } }
+    }
+
+    # 4. Filesystem creation time
     if ($script:FallbackToFileDate) {
         $item = Get-Item -LiteralPath $file
-        return $item.CreationTime.ToString('yyyy-MM-dd HH:mm:ss')
+        return [PSCustomObject]@{ Date = $item.CreationTime.ToString('yyyy-MM-dd HH:mm:ss'); Source = 'filedate' }
     }
 
     return $null
@@ -160,7 +229,7 @@ function Get-TechnicalSignature([string]$file) {
 
 function Compare-MediaFiles([string]$a, [string]$b) {
     if ((Get-FileHashSHA256 $a) -eq (Get-FileHashSHA256 $b)) { return 'identical' }
-    if ((Get-TechnicalSignature $a) -eq (Get-TechnicalSignature $b)) { return 'identical' }
+    if ((Get-TechnicalSignature $a) -eq (Get-TechnicalSignature $b)) { return 'duplicate_diff_size' }
     return 'duplicate_diff_size'
 }
 
@@ -204,13 +273,54 @@ function Resolve-NewName([string]$srcFile, [string]$targetName, [string]$targetD
     return "$final|$cmp"
 }
 
-function Process-File([string]$file, [string]$targetDir, [string]$logFile, [string]$skippedFile) {
-    $metaDate = Get-MetadataDate $file
-    if (-not $metaDate) {
-        Add-Content -Path $skippedFile -Value "`"$file`",`"No usable metadata date found`""
+function Move-ToDirectory([string]$file, [string]$dir, [string]$targetName, [string]$logFile, [string]$skippedFile, [string]$logDate, [string]$logAction) {
+    if (-not (Test-Path -LiteralPath $dir)) {
+        try {
+            New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null
+        } catch {
+            Write-Warning "  [ERROR] Could not create directory '$dir': $_"
+            Add-Content -Path $skippedFile -Value "`"$file`",`"Could not create directory: $_`""
+            return
+        }
+    }
+    $finalName = Get-UniqueName $dir $targetName
+    $finalPath = Join-Path $dir $finalName
+    $filename  = [System.IO.Path]::GetFileName($file)
+    try {
+        Move-Item -LiteralPath $file -Destination $finalPath -ErrorAction Stop
+    } catch {
+        Write-Warning "  [ERROR] $filename -> $finalPath : $_"
+        Add-Content -Path $skippedFile -Value "`"$file`",`"$_`""
         return
     }
+    Write-Host "  [$logAction] $filename -> $finalPath"
+    Add-Content -Path $logFile -Value "`"$file`",`"$finalPath`",`"$logDate`",`"$logAction`",`"new`""
+}
+
+function Process-File([string]$file, [string]$targetDir, [string]$logFile, [string]$skippedFile) {
+    $filename  = [System.IO.Path]::GetFileName($file)
+    $ext       = [System.IO.Path]::GetExtension($filename).ToLower()
+    $stem      = [System.IO.Path]::GetFileNameWithoutExtension($filename)
+    $cleanStem = Get-SanitizedName $stem
+    if (-not $cleanStem) { $cleanStem = 'file' }
+
+    $metaResult = Get-MetadataDate $file
+    if (-not $metaResult) {
+        if ($script:SkippedDestination) {
+            $targetName = "${cleanStem}_noexif${ext}"
+            Move-ToDirectory $file $script:SkippedDestination $targetName $logFile $skippedFile '' 'moved_nodate'
+        } else {
+            Write-Host "  [SKIP] No date found"
+            Add-Content -Path $skippedFile -Value "`"$file`",`"No usable metadata date found`""
+        }
+        return
+    }
+
+    $metaDate = $metaResult.Date
+    $noexif   = $metaResult.Source -ne 'exif'
+
     if ($metaDate -notmatch '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$') {
+        Write-Host "  [SKIP] Invalid date: $metaDate"
         Add-Content -Path $skippedFile -Value "`"$file`",`"Invalid metadata date: $metaDate`""
         return
     }
@@ -223,52 +333,61 @@ function Process-File([string]$file, [string]$targetDir, [string]$logFile, [stri
     $second = $metaDate.Substring(17,2)
     $datetimePrefix = "${year}${month}${day}_${hour}${minute}${second}"
 
-    $filename  = [System.IO.Path]::GetFileName($file)
-    $ext       = [System.IO.Path]::GetExtension($filename).ToLower()
-    $stem      = [System.IO.Path]::GetFileNameWithoutExtension($filename)
-    $cleanStem = Get-SanitizedName $stem
-    if (-not $cleanStem) { $cleanStem = 'file' }
-
-    $targetName = "${datetimePrefix}_${cleanStem}${ext}"
-    $resolved   = Resolve-NewName $file $targetName $targetDir
-    $finalName  = $resolved -replace '\|[^|]*$', ''
-    $comparison = $resolved -replace '^.*\|', ''
-    $finalPath  = Join-Path $targetDir $finalName
+    $noexifSuffix = if ($noexif) { '_noexif' } else { '' }
+    $targetName   = "${datetimePrefix}_${cleanStem}${noexifSuffix}${ext}"
+    $resolved     = Resolve-NewName $file $targetName $targetDir
+    $finalName    = $resolved -replace '\|[^|]*$', ''
+    $comparison   = $resolved -replace '^.*\|', ''
+    $finalPath    = Join-Path $targetDir $finalName
 
     if ($comparison -eq 'already_named') {
-        Write-Host "[SKIP] Already named: $filename"
+        Write-Host "  [SKIP] Already named: $filename"
         Add-Content -Path $logFile -Value "`"$file`",`"$finalPath`",`"$metaDate`",`"already_named`",`"$comparison`""
         return
     }
 
     if ($Mode -eq 'dry-run') {
-        Write-Host "[DRY RUN] $filename"
+        $tag = if ($noexif) { 'DRY RUN noexif' } else { 'DRY RUN' }
+        Write-Host "  [$tag] $filename"
         Write-Host "          -> $finalPath"
-        Write-Host "          comparison: $comparison"
+        Write-Host "          source: $($metaResult.Source)  comparison: $comparison"
         Add-Content -Path $logFile -Value "`"$file`",`"$finalPath`",`"$metaDate`",`"dry-run`",`"$comparison`""
         return
     }
 
     if (-not (Test-Path -LiteralPath $targetDir)) {
-        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+        try {
+            New-Item -ItemType Directory -Path $targetDir -Force -ErrorAction Stop | Out-Null
+        } catch {
+            Write-Warning "  [ERROR] Could not create directory '$targetDir': $_"
+            Add-Content -Path $skippedFile -Value "`"$file`",`"Could not create target directory: $_`""
+            return
+        }
     }
 
     $srcDir = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($file))
-    if ($srcDir -eq $targetDir) {
-        Rename-Item -LiteralPath $file -NewName $finalName
-        $action = 'renamed'
-    } else {
-        Move-Item -LiteralPath $file -Destination $finalPath
-        $action = 'moved'
+    try {
+        if ($srcDir -eq $targetDir) {
+            Rename-Item -LiteralPath $file -NewName $finalName -ErrorAction Stop
+            $action = 'renamed'
+        } else {
+            Move-Item -LiteralPath $file -Destination $finalPath -ErrorAction Stop
+            $action = 'moved'
+        }
+    } catch {
+        Write-Warning "  [ERROR] $filename -> $finalPath : $_"
+        Add-Content -Path $skippedFile -Value "`"$file`",`"$_`""
+        return
     }
-    Write-Host "[$($action.ToUpper())] $filename -> $finalPath [$comparison]"
+    $tag = if ($noexif) { "$($action.ToUpper()) noexif" } else { $action.ToUpper() }
+    Write-Host "  [$tag] $filename -> $finalPath [$comparison]"
     Add-Content -Path $logFile -Value "`"$file`",`"$finalPath`",`"$metaDate`",`"$action`",`"$comparison`""
 }
 
 # --- Help ---
 
 if ($Help) {
-    Get-Help $PSCommandPath -Full
+    Show-Help
     exit 0
 }
 
@@ -286,6 +405,10 @@ if ($PreserveStructure -and -not $Destination) {
 
 if ($Destination) {
     $Destination = [System.IO.Path]::GetFullPath($Destination)
+}
+
+if ($SkippedDestination) {
+    $SkippedDestination = [System.IO.Path]::GetFullPath($SkippedDestination)
 }
 
 # --- Main ---
@@ -306,10 +429,12 @@ Write-Host "Folder:                $root"
 Write-Host "Recurse:               $($Recurse.IsPresent)"
 Write-Host "Destination:           $(if ($Destination) { $Destination } else { '(in place)' })"
 Write-Host "PreserveStructure:     $($PreserveStructure.IsPresent)"
-Write-Host "FallbackToFilenameDate:$($FallbackToFilenameDate.IsPresent)"
-Write-Host "FallbackToFileDate:    $($FallbackToFileDate.IsPresent)"
-Write-Host "Log:                   $logFile"
-Write-Host "Skipped:               $skippedFile"
+Write-Host "FallbackToFilenameDate: $($FallbackToFilenameDate.IsPresent)"
+Write-Host "FallbackToFolderDate:   $($FallbackToFolderDate.IsPresent)"
+Write-Host "FallbackToFileDate:     $($FallbackToFileDate.IsPresent)"
+Write-Host "SkippedDestination:     $(if ($SkippedDestination) { $SkippedDestination } else { '(log only)' })"
+Write-Host "Log:                    $logFile"
+Write-Host "Skipped:                $skippedFile"
 Write-Host ""
 
 $scriptName = Split-Path $PSCommandPath -Leaf
@@ -340,6 +465,7 @@ for ($i = 0; $i -lt $total; $i++) {
     Write-Progress -Activity "Renaming photos" `
         -Status "$($i+1)/$total : $($file.Name)" `
         -PercentComplete ([int](($i / [Math]::Max($total,1)) * 100))
+    Write-Host "[$($i+1)/$total] $($file.FullName)"
     Process-File $file.FullName $targetDir $logFile $skippedFile
 }
 Write-Progress -Activity "Renaming photos" -Completed
